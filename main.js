@@ -1,35 +1,35 @@
 const express = require('express');
 const { createProxyMiddleware, responseInterceptor } = require('http-proxy-middleware')
+const {addBackslashIfNeeded,checkAndReturnFunction}  = require('./utils');
+const {target,port} = require('./config')
 
 const app = express();
-const port =3000;
-const config = {
-  url:'http://localhost:17173',
-  node:`http://localhost:${port}`
-}
-const template = `
-sessionStorage.setItem('token','')
-setTimeout(()=>{
-  if(window.location.pathname.includes('login')){
-    window.location.href = '${config.node}'
-  }
-},200)`
-const proxyMiddleware = createProxyMiddleware({
-  target: config.url, 
-  changeOrigin: true, 
-  selfHandleResponse: true,
-  onProxyRes: responseInterceptor(async (responseBuffer, proxyRes, req, res) => {
-    const response = responseBuffer.toString('utf8'); 
-    
-    return response.replace(
-      "</head>",
-      `<script>${template}</script><!-- EXPRESS_INJECTSCRIPT_FE_SCRIPT --></head>`
-    )
-  })
-});
 
-app.use('/', proxyMiddleware);
+
+const proxyMiddleware = (_url,render)=>{
+  return createProxyMiddleware({
+    target: _url, 
+    changeOrigin: true, 
+    selfHandleResponse: true,
+    onProxyRes: responseInterceptor(async (responseBuffer, proxyRes, req, res) => {
+      const {url,token} = req.query 
+      const response = responseBuffer.toString('utf8'); 
+      
+      return response.replace(
+        "</head>",
+        `<script>${render({port,url,token,...req.query})}</script><!-- EXPRESS_INJECTSCRIPT_FE_SCRIPT --></head>`
+      )
+    })
+  })
+};
+
+
+target.forEach(({name,url,render})=>{
+   app.use(addBackslashIfNeeded(name), proxyMiddleware(url,checkAndReturnFunction(render,()=>{
+    return `console.log(default inject)`
+   })));
+})
 
 app.listen(port, () => {
-  console.log(`Server running at ${config.node}`);
+  console.log(`http://localhost:${port}`);
 });
