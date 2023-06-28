@@ -1,26 +1,35 @@
-const express = require("express");
-const request = require("request");
+const express = require('express');
+const { createProxyMiddleware, responseInterceptor } = require('http-proxy-middleware')
 
 const app = express();
-const port = process.env.PORT || 3000;
-
-app.use("/", (req, res) => {
-  const url = "http://localhost:8000";
-
-  request(url, (err, response, body) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).send("Error occured");
-    }
-
-    const injectedBody = body.replace(
+const port =3000;
+const config = {
+  url:'http://localhost:17173',
+  node:`http://localhost:${port}`
+}
+const template = `
+sessionStorage.setItem('token','')
+setTimeout(()=>{
+  if(window.location.pathname.includes('login')){
+    window.location.href = '${config.node}'
+  }
+},200)`
+const proxyMiddleware = createProxyMiddleware({
+  target: config.url, 
+  changeOrigin: true, 
+  selfHandleResponse: true,
+  onProxyRes: responseInterceptor(async (responseBuffer, proxyRes, req, res) => {
+    const response = responseBuffer.toString('utf8'); 
+    
+    return response.replace(
       "</head>",
-      "<script>alert(123)</script></head>"
-    );
-    res.send(injectedBody);
-  });
+      `<script>${template}</script><!-- EXPRESS_INJECTSCRIPT_FE_SCRIPT --></head>`
+    )
+  })
 });
 
+app.use('/', proxyMiddleware);
+
 app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
+  console.log(`Server running at ${config.node}`);
 });
